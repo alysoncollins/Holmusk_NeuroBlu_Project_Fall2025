@@ -7,7 +7,6 @@ from scipy.stats import shapiro, normaltest
 
 
 def main():
-    #value can be 0 or 1
     ###should have some kind of list with measurements and queries and whatnot
     measurement = "Pulse_Oximetry"
 
