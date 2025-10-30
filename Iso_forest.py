@@ -9,19 +9,19 @@ from sklearn.preprocessing import StandardScaler
 
 def main():
      # select which measurement based on index
-    selector = 1
+    selector = 2
     # ['measurement', 'concept_id', 'lower', 'upper']
     measurements = [
-        ['temperature', 4302666, 95, 100.4],
-        ['body_mass_index', 4245997, 17, 29.9],
-        ['diastolic_blood_pressure', 4154790, 50, 89],
-        ['systolic_blood_pressure', 4152194, 80, 139],
-        ['body_weight', 4099154, 0, 1000],
-        ['body_height measure', 4177340, 0, 250],
-        ['pulse_rate', 4301868, 40, 120],
-        ['pulse_oximetry', 4098046, 85, 100],
-        ['fasting_glucose', 3037110, 50, 125],
-        ['A1c', 37392407, 3.5, 6.4],
+        ['temperature', 4302666, 95, 100.4], #0
+        ['body_mass_index', 4245997, 17, 29.9], #1
+        ['diastolic_blood_pressure', 4154790, 50, 89], #2
+        ['systolic_blood_pressure', 4152194, 80, 139], #3
+        ['body_weight', 4099154, 0, 1000], #4
+        ['body_height measure', 4177340, 0, 250], #5
+        ['pulse_rate', 4301868, 40, 120], #6
+        ['pulse_oximetry', 4098046, 85, 100], #7
+        ['fasting_glucose', 3037110, 50, 125], #8
+        ['A1c', 37392407, 3.5, 6.4], #9
     ]
 
     measurement, concept_id, lower, upper = measurements[selector]
@@ -44,8 +44,9 @@ gender_concept_filter AS (
 )
 SELECT
     m.person_id,
-    CAST(m.measurement_date AS DATE) AS measurement_date,
+    m.measurement_date,
     m.value_as_number,
+    ucf.concept_name AS unit_name,
     CASE
         WHEN sex_concept.concept_id = 8507 THEN 0
         WHEN sex_concept.concept_id = 8532 THEN 1
@@ -77,7 +78,10 @@ LIMIT 100000
     )
 
     # Filter out-of-range values
-    out_of_range = df.filter((pl.col("value_as_number") < lower) | (pl.col("value_as_number") > upper))
+    out_of_range = df.filter(
+        (pl.col("value_as_number") < lower) | 
+        (pl.col("value_as_number") > upper)
+    )
     in_range = df_avg.filter(
         (pl.col("value_as_number") >= lower) &
         (pl.col("value_as_number") <= upper)
@@ -101,6 +105,11 @@ LIMIT 100000
 
     # Run model
     df_results, anomalies, scores = isolation_forest(in_range, X_scaled)
+
+    # Save anomalies to CSV
+    anom_csv = f"{measurement}_anomalies.csv"
+    anomalies.write_csv(anom_csv)
+    print(f"Saved {len(anomalies)} anomalies to {anom_csv}")
 
     # Graphs
     graph_distribution(measurement, df_results, anomalies)
