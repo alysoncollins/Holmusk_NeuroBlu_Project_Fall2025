@@ -13,14 +13,14 @@ def main():
     # ['measurement', 'concept_id', 'lower', 'upper']
     measurements = [
         ['temperature', 4302666, 95, 100.4],
-        ['body mass index', 4245997, 17, 29.9],
-        ['diastolic blood pressure', 4154790, 50, 89],
-        ['systolic blood pressure', 4152194, 80, 139],
-        ['body weight', 4099154, 0, 1000],
-        ['body height measure', 4177340, 0, 250],
-        ['pulse rate', 4301868, 40, 120],
-        ['pulse oximetry', 4098046, 85, 100],
-        ['fasting glucose', 3037110, 50, 125],
+        ['body_mass_index', 4245997, 17, 29.9],
+        ['diastolic_blood_pressure', 4154790, 50, 89],
+        ['systolic_blood_pressure', 4152194, 80, 139],
+        ['body_weight', 4099154, 0, 1000],
+        ['body_height measure', 4177340, 0, 250],
+        ['pulse_rate', 4301868, 40, 120],
+        ['pulse_oximetry', 4098046, 85, 100],
+        ['fasting_glucose', 3037110, 50, 125],
         ['A1c', 37392407, 3.5, 6.4],
     ]
 
@@ -29,7 +29,7 @@ def main():
     
 
     query = f"""
-    WITH
+WITH
 unit_concept_filter AS (
     SELECT DISTINCT c.concept_id, c.concept_name
     FROM concept c
@@ -41,62 +41,53 @@ gender_concept_filter AS (
     SELECT concept_id, concept_name
     FROM concept
     WHERE concept_id IN (8507, 8532)
-),
-
-deduped AS (
-    SELECT
-        m.person_id,
-        CAST(m.measurement_date AS DATE) AS measurement_date,
-        m.unit_concept_id,
-        CASE
-            WHEN COUNT(*) OVER (PARTITION BY m.person_id, CAST(m.measurement_date AS DATE)) > 1
-                THEN 1 ELSE 0
-        END AS has_duplicate,
-        m.value_as_number
-    FROM measurement m
-    JOIN unit_concept_filter ucf ON m.unit_concept_id = ucf.concept_id
-    WHERE m.value_as_number IS NOT NULL
-),
-final_measurements AS (
-    SELECT
-        person_id,
-        measurement_date,
-        unit_concept_id,
-        CASE
-            WHEN has_duplicate = 1 THEN AVG(value_as_number) OVER (PARTITION BY person_id, measurement_date, unit_concept_id)
-            ELSE value_as_number
-        END AS value_as_number
-    FROM deduped
 )
 SELECT
-    fm.value_as_number,
+    m.person_id,
+    CAST(m.measurement_date AS DATE) AS measurement_date,
+    m.value_as_number,
     CASE
         WHEN sex_concept.concept_id = 8507 THEN 0
         WHEN sex_concept.concept_id = 8532 THEN 1
         ELSE 2
     END AS sex,
-    EXTRACT(YEAR FROM fm.measurement_date) - p.year_of_birth AS age
-FROM final_measurements fm
-JOIN person p
-    ON fm.person_id = p.person_id
+    EXTRACT(YEAR FROM m.measurement_date) - p.year_of_birth AS age
+FROM measurement m
+JOIN person p ON m.person_id = p.person_id
 LEFT JOIN gender_concept_filter sex_concept
     ON p.gender_concept_id = sex_concept.concept_id
-    """
+JOIN unit_concept_filter ucf
+    ON m.unit_concept_id = ucf.concept_id
+WHERE m.value_as_number IS NOT NULL
+LIMIT 100000
+"""
     
      # Run the query
     values = neuroblu.get_query(query)
     df = pl.DataFrame(values)
 
-    # Filter out-of-range values
-    #out_of_range = df.filter((pl.col("value_as_number") < lower) | (pl.col("value_as_number") > upper))
-    in_range = df.filter((pl.col("value_as_number") >= lower) & (pl.col("value_as_number") <= upper))
+    # Average duplicate measurements (same person_id + date)
+    df_avg = (
+        df.groupby(["person_id", "measurement_date"])
+          .agg([
+              pl.col("value_as_number").mean().alias("value_as_number"),
+              pl.col("age").first().alias("age"),
+              pl.col("sex").first().alias("sex"),
+          ])
+    )
 
+    # Filter out-of-range values
+    out_of_range = df.filter((pl.col("value_as_number") < lower) | (pl.col("value_as_number") > upper))
+    in_range = df_avg.filter(
+        (pl.col("value_as_number") >= lower) &
+        (pl.col("value_as_number") <= upper)
+    )
     ### at full data set, it doesn't save due to exceeding file-size limit, could try experimenting with columns added
     ### 5880397 were deemed out of range for temperature so might just be too large
     # Save out-of-range values to CSV
-    #out_of_csv = f"{measurement}_out_of_range.csv"
-    #out_of_range.write_csv(out_of_csv)
-    #print(f"Saved {len(out_of_range)} out-of-range rows to {out_of_csv}")
+    out_of_csv = f"{measurement}_out_of_range.csv"
+    out_of_range.write_csv(out_of_csv)
+    print(f"Saved {len(out_of_range)} out-of-range rows to {out_of_csv}")
 
     # (keep only value_as_number, age, sex)
     in_range = in_range.drop_nulls(subset=["value_as_number", "age", "sex"])
