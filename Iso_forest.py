@@ -29,71 +29,80 @@ def main():
     
 
     query = f"""
-    WITH concept_filter AS (
-        SELECT concept_id, concept_name
-        FROM concept
-        WHERE concept_id IN (
-            SELECT DISTINCT unit_concept_id
-            FROM measurement
-            WHERE measurement_concept_id = {concept_id}
-        )
-    )
-    SELECT DISTINCT
-        m.value_as_number,
-        sex_concept.concept_name AS sex,
-        EXTRACT(YEAR FROM m.measurement_date) - p.year_of_birth AS age,
-        c.concept_name AS unit_name,
-        p.person_id
-        m.measurement_date,
+    WITH
+unit_concept_filter AS (
+    SELECT DISTINCT c.concept_id, c.concept_name
+    FROM concept c
+    INNER JOIN measurement m
+        ON c.concept_id = m.unit_concept_id
+    WHERE m.measurement_concept_id = {concept_id}
+),
+gender_concept_filter AS (
+    SELECT concept_id, concept_name
+    FROM concept
+    WHERE concept_id IN (8507, 8532)
+),
+
+deduped AS (
+    SELECT
+        m.person_id,
+        CAST(m.measurement_date AS DATE) AS measurement_date,
+        m.unit_concept_id,
+        CASE
+            WHEN COUNT(*) OVER (PARTITION BY m.person_id, CAST(m.measurement_date AS DATE)) > 1
+                THEN 1 ELSE 0
+        END AS has_duplicate,
+        m.value_as_number
     FROM measurement m
-    JOIN concept_filter c
-        ON m.unit_concept_id = c.concept_id
-    JOIN person p
-        ON m.person_id = p.person_id
-    LEFT JOIN concept AS sex_concept
-        ON p.gender_concept_id = sex_concept.concept_id
-    WHERE m.value_as_number IS NOT NULL;
+    JOIN unit_concept_filter ucf ON m.unit_concept_id = ucf.concept_id
+    WHERE m.value_as_number IS NOT NULL
+),
+final_measurements AS (
+    SELECT
+        person_id,
+        measurement_date,
+        unit_concept_id,
+        CASE
+            WHEN has_duplicate = 1 THEN AVG(value_as_number) OVER (PARTITION BY person_id, measurement_date, unit_concept_id)
+            ELSE value_as_number
+        END AS value_as_number
+    FROM deduped
+)
+SELECT
+    fm.value_as_number,
+    CASE
+        WHEN sex_concept.concept_id = 8507 THEN 0
+        WHEN sex_concept.concept_id = 8532 THEN 1
+        ELSE 2
+    END AS sex,
+    EXTRACT(YEAR FROM fm.measurement_date) - p.year_of_birth AS age
+FROM final_measurements fm
+JOIN person p
+    ON fm.person_id = p.person_id
+LEFT JOIN gender_concept_filter sex_concept
+    ON p.gender_concept_id = sex_concept.concept_id
     """
     
      # Run the query
     values = neuroblu.get_query(query)
     df = pl.DataFrame(values)
 
-    # --- Average multiple same-day measurements per person ---
-    if "person_id" in df.columns and "measurement_date" in df.columns:
-        df = (
-            df.group_by(["person_id", "measurement_date"])
-            .agg([
-                pl.col("value_as_number").mean().alias("value_as_number"),
-                pl.col("sex").first(),
-                pl.col("age").first(),
-                pl.col("unit_name").first(),
-            ])
-        )
-        print(f"Averaged same-day duplicates: {len(df)} unique (person, date) pairs remaining.")
-    else:
-        print("Warning: person_id or measurement_date missing; skipping daily averaging.")
-
     # Filter out-of-range values
-    out_of_range = df.filter((pl.col("value_as_number") < lower) | (pl.col("value_as_number") > upper))
+    #out_of_range = df.filter((pl.col("value_as_number") < lower) | (pl.col("value_as_number") > upper))
     in_range = df.filter((pl.col("value_as_number") >= lower) & (pl.col("value_as_number") <= upper))
 
+    ### at full data set, it doesn't save due to exceeding file-size limit, could try experimenting with columns added
+    ### 5880397 were deemed out of range for temperature so might just be too large
     # Save out-of-range values to CSV
-    out_of_csv = f"{measurement}_out_of_range.csv"
-    out_of_range.write_csv(out_of_csv)
-    print(f"Saved {len(out_of_range)} out-of-range rows to {out_of_csv}")
+    #out_of_csv = f"{measurement}_out_of_range.csv"
+    #out_of_range.write_csv(out_of_csv)
+    #print(f"Saved {len(out_of_range)} out-of-range rows to {out_of_csv}")
 
     # (keep only value_as_number, age, sex)
     in_range = in_range.drop_nulls(subset=["value_as_number", "age", "sex"])
 
-    # Encode sex as numeric (e.g., male/female → 0/1)
-    encoder = LabelEncoder()
-    in_range = in_range.with_columns(
-        pl.Series("sex_encoded", encoder.fit_transform(in_range["sex"].to_list()))
-    )
-
     # Select features
-    X = in_range.select(["value_as_number", "age", "sex_encoded"])
+    X = in_range.select(["value_as_number", "age", "sex"])
 
     # Standardize (flatten) to avoid one feature dominating
     scaler = StandardScaler()
