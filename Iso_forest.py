@@ -4,12 +4,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.ensemble import IsolationForest
 from scipy.stats import shapiro, normaltest
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 
 
 def main():
      # select which measurement based on index
-    selector = 0
+    selector = 1
     # ['measurement', 'concept_id', 'lower', 'upper']
     measurements = [
         ['temperature', 4302666, 95, 100.4],
@@ -19,9 +19,9 @@ def main():
         ['body weight', 4099154, 0, 1000],
         ['body height measure', 4177340, 0, 250],
         ['pulse rate', 4301868, 40, 120],
-        ['pulse oximetry', 4098046, 0.85, 1],
+        ['pulse oximetry', 4098046, 85, 100],
         ['fasting glucose', 3037110, 50, 125],
-        ['A1c', 37392407, 0.035, 0.064],
+        ['A1c', 37392407, 3.5, 6.4],
     ]
 
     measurement, concept_id, lower, upper = measurements[selector]
