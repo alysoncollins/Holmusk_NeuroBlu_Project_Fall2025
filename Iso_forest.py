@@ -69,7 +69,7 @@ LIMIT 100000
 
     # Average duplicate measurements (same person_id + date)
     df_avg = (
-        df.groupby(["person_id", "measurement_date"])
+        df.groupby(["person_id", "measurement_date", "unit_name"])
           .agg([
               pl.col("value_as_number").mean().alias("value_as_number"),
               pl.col("age").first().alias("age"),
