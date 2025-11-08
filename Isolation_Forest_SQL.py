@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 
 def main():
      # select which measurement based on index
-    selector = 0
+    selector = 1
     # ['measurement', 'concept_id', 'lower', 'upper']
     measurements = [
         ['temperature', (4302666,), 95, 100.4],
@@ -41,6 +41,15 @@ gender_concept_filter AS (
     FROM concept
     WHERE concept_id IN (8507, 8532)
 ),
+latest_bmi AS (
+    SELECT
+        m.person_id,
+        FIRST(m.value_as_number ORDER BY m.measurement_date DESC) AS bmi
+    FROM measurement m
+    WHERE m.measurement_concept_id = 4245997
+      AND m.value_as_number IS NOT NULL
+    GROUP BY m.person_id
+),
 deduped AS (
     SELECT
         ANY_VALUE(m.measurement_id) AS measurement_id,
@@ -62,11 +71,12 @@ SELECT
         ELSE 2
     END AS sex,
     EXTRACT(YEAR FROM d.measurement_date) - p.year_of_birth AS age,
-    d.unit_concept_id
-    
+    d.unit_concept_id,
+    COALESCE(b.bmi, 21.7) AS bmi
 FROM deduped d
 JOIN person p ON d.person_id = p.person_id
 LEFT JOIN gender_concept_filter sex_concept ON p.gender_concept_id = sex_concept.concept_id
+LEFT JOIN latest_bmi b ON d.person_id = b.person_id
     """
     
      # Run the query
@@ -81,16 +91,16 @@ LEFT JOIN gender_concept_filter sex_concept ON p.gender_concept_id = sex_concept
     ### 5880397 were deemed out of range so might just be too large
     # Save out-of-range values to CSV
     out_of_csv = f"{measurement}_out_of_range.csv"
-    out_of_range = out_of_range.select(["measurement_id","value_as_number"])
+    out_of_range = out_of_range.select(["measurement_id"])
     out_of_range.write_csv(out_of_csv)
-    #print(f"Saved {len(out_of_range)} out-of-range rows to {out_of_csv}")
+    print(f"Saved {out_of_range.height} out-of-range rows to {out_of_csv}")
     
 
     # (keep only value_as_number, age, sex)
     in_range = in_range.drop_nulls(subset=["value_as_number", "age", "sex"])
 
     # Select features
-    X = in_range.select(["value_as_number", "age", "sex"])
+    X = in_range.select(["value_as_number", "age", "sex", "bmi"])
 
     # Standardize (flatten) to avoid one feature dominating
     scaler = StandardScaler()
@@ -101,9 +111,9 @@ LEFT JOIN gender_concept_filter sex_concept ON p.gender_concept_id = sex_concept
 
     # Save anomalies to CSV
     anom_csv = f"{measurement}_anomalies.csv"
-    anomalies_columns = anomalies.select(["measurement_id","value_as_number"])
+    anomalies_columns = anomalies.select(["measurement_id"])
     anomalies_columns.write_csv(anom_csv)
-    print(f"Saved {len(anomalies)} anomalies to {anom_csv}")
+    print(f"Saved {anomalies.height} anomalies to {anom_csv}")
 
     # Graphs
     graph_distribution(measurement, df_results, anomalies)
