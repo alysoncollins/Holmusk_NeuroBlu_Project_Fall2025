@@ -100,7 +100,10 @@ LEFT JOIN latest_bmi b ON d.person_id = b.person_id
     in_range = in_range.drop_nulls(subset=["value_as_number", "age", "sex"])
 
     # Select features
-    X = in_range.select(["value_as_number", "age", "sex", "bmi"])
+    if measurement == 'body_mass_index':
+        X = in_range.select(["value_as_number", "age", "sex"])
+    else:
+        X = in_range.select(["value_as_number", "age", "sex", "bmi"])
 
     # Standardize (flatten) to avoid one feature dominating
     scaler = StandardScaler()
