@@ -1,5 +1,6 @@
 import neuroblu
 import polars as pl
+import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.ensemble import IsolationForest
@@ -8,19 +9,19 @@ from sklearn.preprocessing import StandardScaler
 
 def main():
      # select which measurement based on index
-    selector = 1
+    selector = 0
     # ['measurement', 'concept_id', 'lower', 'upper']
     measurements = [
-        ['temperature', (4302666,), 95, 100.4],
-        ['body_mass_index', (4245997,), 17, 29.9],
-        ['diastolic_blood_pressure', (4154790,), 50, 89],
-        ['systolic_blood_pressure', (4152194,), 80, 139],
-        ['body_weight', (4099154,), 0, 1000],
-        ['body_height', (4177340,), 0, 275],
-        ['pulse_rate', (4301868,), 40, 120],
-        ['pulse_oximetry', (4098046,), 0.85, 1],
-        ['fasting_glucose', (3037110,), 50, 125],
-        ['A1c', (3003309, 3004410, 3005673, 3007263, 3034639, 36032094, 40762352, 42869630), 0.035, 0.064],
+        ['temperature', (4302666,), 95, 100.4], #0
+        ['body_mass_index', (4245997,), 17, 29.9], #1
+        ['diastolic_blood_pressure', (4154790,), 50, 89], #2
+        ['systolic_blood_pressure', (4152194,), 80, 139], #3
+        ['pulse_rate', (4301868,), 40, 120], #4
+        ['pulse_oximetry', (4098046,), 0.85, 1], #5
+        ['fasting_glucose', (3037110,), 50, 125], #6
+        ['A1c', (3003309, 3004410, 3005673, 3007263, 3034639, 36032094, 40762352, 42869630), 0.035, 0.064], #7
+        #['body_weight', (4099154,), 0, 1000],
+        #['body_height', (4177340,), 0, 275],
     ]
 
     measurement, concept_id, lower, upper = measurements[selector]
@@ -87,15 +88,20 @@ LEFT JOIN latest_bmi b ON d.person_id = b.person_id
     out_of_range = df.filter((pl.col("value_as_number") < lower) | (pl.col("value_as_number") > upper))
     in_range = df.filter((pl.col("value_as_number") >= lower) & (pl.col("value_as_number") <= upper))
 
-    ### at full data set, it doesn't save due to exceeding file-size limit, could try experimenting with columns added
-    ### 5880397 were deemed out of range so might just be too large
-    # Save out-of-range values to CSV
-    out_of_csv = f"{measurement}_out_of_range.csv"
-    out_of_range = out_of_range.select(["measurement_id"])
-    out_of_range.write_csv(out_of_csv)
-    print(f"Saved {out_of_range.height} out-of-range rows to {out_of_csv}")
-    
 
+    # Save out-of-range values to CSV
+    #out_of_csv = f"{measurement}_out_of_range.csv"
+    #out_of_range = out_of_range.select(["measurement_id"])
+    #out_of_range.write_csv(out_of_csv)
+    #print(f"Saved {out_of_range.height} out-of-range rows to {out_of_csv}")
+
+    outlier_df_name = f"{measurement}_outlier_data_frame"
+    pd_outlier = out_of_range.to_pandas()
+    
+    neuroblu.save_df(pd_outlier, outlier_df_name, overwrite=True)
+    print(f"Saved {out_of_range.height} outliers to data frame")
+
+    
     # (keep only value_as_number, age, sex)
     in_range = in_range.drop_nulls(subset=["value_as_number", "age", "sex"])
 
@@ -113,14 +119,26 @@ LEFT JOIN latest_bmi b ON d.person_id = b.person_id
     df_results, anomalies, scores = isolation_forest(in_range, X_scaled)
 
     # Save anomalies to CSV
-    anom_csv = f"{measurement}_anomalies.csv"
-    anomalies_columns = anomalies.select(["measurement_id"])
-    anomalies_columns.write_csv(anom_csv)
-    print(f"Saved {anomalies.height} anomalies to {anom_csv}")
+    #anom_csv = f"{measurement}_anomalies.csv"
+    #anomalies_columns = anomalies.select(["measurement_id"])
+    #anomalies_columns.write_csv(anom_csv)
+
+    anom_df_name = f"{measurement}_anom_date_frame"
+    pd_anom = anomalies.to_pandas()
+
+    neuroblu.save_df(pd_anom, anom_df_name, overwrite=True)
+    print(f"Saved {anomalies.height} anomalies to data frame")
+    
 
     # Graphs
     graph_distribution(measurement, df_results, anomalies)
     graph_anomalies(measurement, scores)
+
+    # save percentages
+    percent = f"{measurement}_make_up.csv"
+    message = f"Detected {len(anomalies)} anomalies out of {len(df)} total samples."
+    with open(percent, 'w', encoding='utf-8') as f:
+        f.write(message)
 
 
 
