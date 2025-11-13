@@ -91,7 +91,7 @@ LEFT JOIN latest_bmi b ON d.person_id = b.person_id
 
     # Save out-of-range values to CSV
     #out_of_csv = f"{measurement}_out_of_range.csv"
-    #out_of_range = out_of_range.select(["measurement_id"])
+    out_of_range = out_of_range.select(["measurement_id", "value_as_number"])
     #out_of_range.write_csv(out_of_csv)
     #print(f"Saved {out_of_range.height} out-of-range rows to {out_of_csv}")
 
