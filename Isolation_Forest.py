@@ -9,7 +9,7 @@ from sklearn.preprocessing import StandardScaler
 
 def main():
     # select which measurement based on index
-    selector = 0
+    selector = 5
     
     # ['measurement', 'concept_id', 'lower', 'upper']
     measurements = [
@@ -32,7 +32,10 @@ def main():
     df = pl.DataFrame(values)
     
     # (keep only value_as_number, age, sex, BMI)
-    X = df.drop_nulls(subset=["value_as_number", "age", "sex", "bmi"])
+    if measurement == 'body_mass_index':
+        X = df.select(["value_as_number", "age", "sex"])
+    else:
+        X = df.select(["value_as_number", "age", "sex", "bmi"])
 
     # Standardize (flatten) to avoid one feature dominating
     scaler = StandardScaler()
@@ -80,65 +83,64 @@ def isolation_forest(df, X_scaled):
 
 def graph_distribution(measurement, df, anomalies, percentage):
     # Age Graph
-    plt.figure(figsize=(8, 5))
-    plt.scatter(anomalies["value_as_number"], anomalies["age"], s=10)
+    plt.figure(figsize=(10, 6))
+    plt.hexbin(anomalies["value_as_number"], anomalies["age"], gridsize=50, cmap="Reds", mincnt=1)
+    plt.colorbar(label="Count")
     plt.title(f"{measurement}: Value vs Age\n{percentage}")
     plt.xlabel("value_as_number")
     plt.ylabel("Age")
+    plt.tight_layout()
     plt.savefig(f"{measurement}_value_vs_age.png", dpi=300)
     plt.close()
 
-    # Sex Graph
-    plt.figure(figsize=(8, 5))
-    plt.scatter(anomalies["value_as_number"], anomalies["sex"], s=10)
+    # Sex Graph (jitter to avoid overlap)
+    plt.figure(figsize=(10, 6))
+    sex_jitter = anomalies["sex"] + np.random.uniform(-0.1, 0.1, size=len(anomalies))
+    plt.scatter(anomalies["value_as_number"], sex_jitter, s=8, alpha=0.5)
+    plt.yticks([0, 1, 2], ["Male", "Female", "Other"])
     plt.title(f"{measurement}: Value vs Sex\n{percentage}")
     plt.xlabel("value_as_number")
     plt.ylabel("Sex")
+    plt.tight_layout()
     plt.savefig(f"{measurement}_value_vs_sex.png", dpi=300)
     plt.close()
 
-    # BMI graph
-    plt.figure(figsize=(8, 5))
-    plt.scatter(anomalies["value_as_number"], anomalies["bmi"], s=10)
+    # BMI graph (hexbin)
+    plt.figure(figsize=(10, 6))
+    plt.hexbin(anomalies["value_as_number"], anomalies["bmi"], gridsize=50, cmap="Reds", mincnt=1)
+    plt.colorbar(label="Count")
     plt.title(f"{measurement}: Value vs BMI\n{percentage}")
     plt.xlabel("value_as_number")
     plt.ylabel("BMI")
+    plt.tight_layout()
     plt.savefig(f"{measurement}_value_vs_bmi.png", dpi=300)
     plt.close()
 
-    # 4D graph
-    plt.figure(figsize=(10, 6))
-
-    markers = {
-        0: "o",   # male
-        1: "s",   # female
-        2: "D",   # other
-    }
-
+    # 4D graph (sex markers + BMI color)
+    plt.figure(figsize=(12, 7))
+    markers = {0: "o", 1: "s", 2: "D"}
     bmi_min = float(anomalies["bmi"].min())
     bmi_max = float(anomalies["bmi"].max())
     norm = plt.Normalize(vmin=bmi_min, vmax=bmi_max)
 
     for sex_value, marker in markers.items():
-
-        subset = anomalies.filter(pl.col("sex") == sex_value)
-        subset_pd = subset.to_pandas()
-
-        scatter = plt.scatter(
-            subset_pd["value_as_number"],
-            subset_pd["age"],
-            c=subset_pd["bmi"],
-            cmap="viridis",
-            norm=norm,            # <-- THIS FIXES THE COLORBAR
-            s=40,
+        subset = anomalies.filter(pl.col("sex") == sex_value).to_pandas()
+        if len(subset) == 0:
+            continue
+        plt.scatter(
+            subset["value_as_number"],
+            subset["age"],
+            c=subset["bmi"],
+            cmap="coolwarm",
+            norm=norm,
+            s=30,
+            alpha=0.6,
             marker=marker,
-            alpha=0.75,
             label=f"Sex {sex_value}"
         )
 
-    cbar = plt.colorbar(scatter)
-    cbar.set_label("BMI")        # shows actual BMI numbers
-
+    cbar = plt.colorbar()
+    cbar.set_label("BMI")
     plt.xlabel("value_as_number")
     plt.ylabel("Age")
     plt.title(f"{measurement} — Multi-Dimensional Plot\n{percentage}")
@@ -149,49 +151,44 @@ def graph_distribution(measurement, df, anomalies, percentage):
 
 
 def graph_distribution_bmi_only(df, anomalies, percentage):
-    # Age vs BMI
-    plt.figure(figsize=(8, 5))
-    plt.scatter(anomalies["bmi"], anomalies["age"], s=10)
+    # Age vs BMI (hexbin)
+    plt.figure(figsize=(10, 6))
+    plt.hexbin(anomalies["value_as_number"], anomalies["age"], gridsize=50, cmap="Reds", mincnt=1)
+    plt.colorbar(label="Count")
     plt.title(f"BMI: BMI vs Age\n{percentage}")
     plt.xlabel("BMI")
     plt.ylabel("Age")
+    plt.tight_layout()
     plt.savefig("bmi_vs_age.png", dpi=300)
     plt.close()
 
-    # Sex vs BMI
-    plt.figure(figsize=(8, 5))
-    plt.scatter(anomalies["bmi"], anomalies["sex"], s=10)
+    # Sex vs BMI (jitter)
+    plt.figure(figsize=(10, 6))
+    sex_jitter = anomalies["sex"] + np.random.uniform(-0.1, 0.1, size=len(anomalies))
+    plt.scatter(anomalies["value_as_number"], sex_jitter, s=8, alpha=0.5)
+    plt.yticks([0, 1, 2], ["Male", "Female", "Other"])
     plt.title(f"BMI: BMI vs Sex\n{percentage}")
     plt.xlabel("BMI")
     plt.ylabel("Sex")
+    plt.tight_layout()
     plt.savefig("bmi_vs_sex.png", dpi=300)
     plt.close()
 
-    #3D graph
-    plt.figure(figsize=(10, 6))
-
-    markers = {
-        0: "o",   # male
-        1: "s",   # female
-        2: "D",   # other
-    }
-
+    # BMI vs Age with sex-coded markers
+    plt.figure(figsize=(12, 7))
+    markers = {0: "o", 1: "s", 2: "D"}
     for sex_value, marker in markers.items():
-        subset = anomalies.filter(pl.col("sex") == sex_value)
-        subset_pd = subset.to_pandas()
-
-        if len(subset_pd) == 0:
+        subset = anomalies.filter(pl.col("sex") == sex_value).to_pandas()
+        if len(subset) == 0:
             continue
-
         plt.scatter(
-            subset_pd["bmi"],
-            subset_pd["age"],
+            subset["value_as_number"],
+            subset["age"],
             marker=marker,
-            alpha=0.75,
-            s=40,
+            alpha=0.6,
+            s=30,
             label=f"Sex {sex_value}",
         )
-
     plt.xlabel("BMI")
     plt.ylabel("Age")
     plt.title(f"BMI — BMI vs Age (Sex-coded markers)\n{percentage}")
@@ -199,7 +196,6 @@ def graph_distribution_bmi_only(df, anomalies, percentage):
     plt.tight_layout()
     plt.savefig("bmi_bmi_vs_age_sex_markers.png", dpi=300)
     plt.close()
-
 
 
 def query_function(concept_id, lower, upper):
@@ -280,7 +276,6 @@ def query_function(concept_id, lower, upper):
         ON p.gender_concept_id = sex_concept.concept_id
     LEFT JOIN latest_bmi 
         ON m.person_id = latest_bmi.person_id
-    LIMIT 10000
     """
     return query
 
