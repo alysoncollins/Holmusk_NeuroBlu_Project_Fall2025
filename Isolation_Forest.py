@@ -9,18 +9,18 @@ from sklearn.preprocessing import StandardScaler
 
 def main():
     # select which measurement based on index
-    selector = 5
+    selector = 0
     
-    # ['measurement', 'concept_id', 'lower', 'upper']
+    # ['measurement', 'concept_id', 'lower', 'upper', 'contamination']
     measurements = [
         ['temperature', (4302666,), 95, 100.4], #0
         ['body_mass_index', (4245997,), 17, 29.9], #1
-        ['diastolic_blood_pressure', (4154790,), 50, 89], #2
-        ['systolic_blood_pressure', (4152194,), 80, 139], #3
+        ['diastolic_blood_pressure', (4154790,), 50, 89, 0.05], #2
+        ['systolic_blood_pressure', (4152194,), 80, 139, 0.05], #3
         ['pulse_rate', (4301868,), 40, 120], #4
         ['pulse_oximetry', (4098046,), 85, 100], #5
-        ['fasting_glucose', (3037110,), 50, 125], #6
-        ['A1c', (3003309, 3004410, 3005673, 3007263, 3034639, 36032094, 40762352, 42869630), 3.5, 6.4], #7
+        ['fasting_glucose', (3037110,), 50, 125, 0.0975], #6
+        ['A1c', (3003309, 3004410, 3005673, 3007263, 3034639, 36032094, 40762352, 42869630), 3.5, 6.4, 0.07], #7
         #['body_weight', (4099154,), 0, 1000],
         #['body_height', (4177340,), 0, 275],
     ]
@@ -61,8 +61,8 @@ def main():
 
 
 
-def isolation_forest(df, X_scaled):
-    iso = IsolationForest(contamination=0.02, random_state=42)
+def isolation_forest(df, X_scaled, contamination):
+    iso = IsolationForest(contamination='auto', random_state=42)
     y_pred = iso.fit_predict(X_scaled)
     scores = iso.decision_function(X_scaled)
 
