@@ -7,14 +7,25 @@ from sklearn.neighbors import LocalOutlierFactor
 #from scipy.stats import shapiro, normaltest
 
 query = """
-select 
-    m.value_as_number,
-    c.concept_name
+WITH concept_filter AS (
+
+ SELECT concept_id, concept_name
+ FROM concept
+ WHERE concept_id IN (
+ SELECT DISTINCT unit_concept_id
+ FROM measurement
+ WHERE measurement_concept_id = 4302666
+
+ ) 
+)
+select
+ m.value_as_number,
+ c.concept_name
 from measurement m
-join concept c
-    on m.unit_concept_id = c.concept_id
-where m.measurement_concept_id = 4302666
-limit 1000
+join concept_filter c
+ on m.unit_concept_id = c.concept_id
+WHERE m.value_as_number IS NOT NULL
+
 """
 ### Program doesn't finish running if limit =100000000 or no limit
 
